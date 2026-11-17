@@ -61,6 +61,7 @@ export async function withOfflineHarness(
     managerSettings?: Partial<ManagerSettings>;
     builtinTools?: boolean;
     extensionFactories?: ExtensionFactory[];
+    mode?: "print" | "rpc";
   },
   body: (harness: OfflineHarness) => Promise<void>,
 ): Promise<void> {
@@ -220,7 +221,10 @@ export async function withOfflineHarness(
       });
       sessions.add(session);
       assert.deepEqual(extensionsResult.errors, []);
-      await session.bindExtensions({ mode: "print", onError: (error) => errors.push(error) });
+      await session.bindExtensions({
+        mode: options.mode ?? "print",
+        onError: (error) => errors.push(error),
+      });
       const enabled = options.managerSettings?.subagentMode !== "off";
       assert.equal(session.getActiveToolNames().includes("agent_spawn"), enabled);
       assert.equal(

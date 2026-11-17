@@ -20,6 +20,48 @@ Requires pi **0.99.2+**.
 pi install npm:pi-subagent-manager
 ```
 
+## Herdr sidebar integration
+
+When an interactive or RPC Pi session runs inside Herdr (`HC_TERMINAL_ID` is set),
+this extension publishes SDK subagent hierarchy and lifecycle states to the parent
+terminal's `pi.subagents` label. A separately installed custom Herdr Agents mod can
+render those virtual children and show **main idle · 2 subagents running** without
+changing Pi's own working/idle state or patching Herdr. Print-mode/SDK child
+sessions never claim the parent's terminal.
+
+The optional bridge requires `hc` on `PATH`. It is best-effort: missing/disconnected
+Herdr never interrupts Pi. Set `PI_HERDR_SUBAGENTS=0` to disable it. No tasks,
+prompts, tool arguments, or transcripts are exported—only session ID, paths, agent
+types, lifecycle states, and counts. Snapshots are capped at 16 KiB and 128 nodes;
+active children are prioritized and omitted nodes remain included in totals.
+Updates coalesce for 100 ms, active snapshots heartbeat every 30 seconds, and the
+label is removed on clean shutdown. Consumers should treat active snapshots older
+than 90 seconds as stale, since an abrupt process kill cannot run cleanup.
+
+Custom Herdr mod/layout source and installation instructions are maintained in
+`devbox/herdr-mods/pi-agents/`; no changes to Herdr's shipped files are required.
+Reload Pi after installing/updating this extension to activate the bridge.
+
+### Manual lifecycle smoke test
+
+From a **new disposable Herdr terminal tab**, with Node 24 selected and this
+repository as the working directory:
+
+```bash
+control=$(mktemp -d /tmp/pi-herdr-smoke-XXXXXX)
+node node_modules/tsx/dist/cli.mjs scripts/herdr-smoke.ts "$control"
+```
+
+The test uses real SDK sessions, the real manager/bridge, and the real Herdr core,
+but a controlled offline model (no API calls). `ready.json` records two nested
+running children while the main session is idle. From another shell, create
+`$control/complete` to settle them, then `$control/finish` to shut down; the script
+verifies label removal and writes `finished.json`. Each stage times out after
+five minutes. Inspect the same visible sidebar throughout without reloading.
+A terminal created with `hc run --bg` must first be placed in the app's document
+before it can appear in the Agents sidebar. Do not run this test in an existing
+user session: the bridge owns that terminal's `pi.subagents` label.
+
 ## Start using it
 
 Ask pi to delegate in plain language:

@@ -14,6 +14,7 @@ import {
   offerAgentImport,
 } from "./prefs/agent-import.ts";
 import { ThreadManager } from "./orch/manager.ts";
+import { HerdrBridge } from "./orch/herdr-bridge.ts";
 import { loadManagerSettings } from "./prefs/settings.ts";
 import { configureAgents } from "./ui/settings-ui.ts";
 import { AgentNavigationController } from "./ui/status-ui.ts";
@@ -60,6 +61,15 @@ export default function piSubagent(pi: ExtensionAPI): void {
     includeProject: false,
   });
   let manager: ThreadManager | undefined;
+  let herdr: HerdrBridge | undefined;
+  const publishHerdr = () => {
+    // Print/SDK children inherit the parent's environment, but must not claim
+    // its terminal. Only the outer interactive/RPC session publishes.
+    if (manager && context && (context.mode === "tui" || context.mode === "rpc")) {
+      herdr ??= new HerdrBridge();
+      herdr.update(context.sessionManager.getSessionId(), manager.list());
+    }
+  };
   let costLedger = new CostLedger();
   const costFooter = new CostFooterController(
     pi,
@@ -283,6 +293,7 @@ export default function piSubagent(pi: ExtensionAPI): void {
   const persist = () => {
     if (!manager) return;
     registryWriter.write(requireContext().sessionManager.getSessionId(), manager.saved());
+    publishHerdr();
   };
   const warnDelivery = (error: unknown) => {
     if (limits.subagentMode === "off") return;
@@ -696,6 +707,9 @@ export default function piSubagent(pi: ExtensionAPI): void {
     // Recover a persisted settlement whose ledger append was interrupted, including runs paused on reload.
     for (const saved of instance.saved()) rollupCost({ ...saved.view, updatedAt: Date.now() });
     restoreRootMailbox(ctx);
+    // Restore emits no mutations. Publish even for an empty/new branch so the
+    // sidebar cannot retain children from the previous session or tree node.
+    publishHerdr();
     refreshWidget(ctx);
     const diagnostics = [...store.diagnostics, ...settingsDiagnostics];
     if (limits.subagentMode !== "off" && diagnostics.length)
@@ -740,6 +754,8 @@ export default function piSubagent(pi: ExtensionAPI): void {
     if (context?.hasUI) context.ui.setWidget("pi-subagent", undefined);
     manager = undefined;
     context = undefined;
+    await herdr?.close();
+    herdr = undefined;
   });
   const agentSubcommands = ["tree", "settings", "types", "import", "reload", "reap"] as const;
   const spawnModes = ["fork", "fresh"] as const;
