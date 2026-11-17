@@ -79,6 +79,8 @@ export interface ThreadView {
   startedAt?: number;
   /** Most recent run start (spawn or resume). Persisted; orders the agent tree newest-first. */
   lastStartedAt?: number;
+  /** Last completed/failed/stopped settlement, positive epoch-ms; retained on resume/pause. */
+  lastFinishedAt?: number;
   /** Cumulative input tokens, including cache read/write. Live views include the in-progress message. */
   inputTokens?: number;
   /** Cumulative output tokens. Live views include the in-progress message. */
@@ -188,6 +190,8 @@ export interface SavedThreadView {
   /** Frozen cumulative active time. `startedAt` is intentionally not persisted. */
   elapsedMs?: number;
   lastStartedAt?: number;
+  /** Optional for legacy registries; never inferred from update/publication time. */
+  lastFinishedAt?: number;
   inputTokens?: number;
   outputTokens?: number;
   costUsd?: number;
