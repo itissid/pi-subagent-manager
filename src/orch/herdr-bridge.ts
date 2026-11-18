@@ -12,8 +12,6 @@ export interface HerdrThread {
   parent?: string | null;
   type: string;
   state: ThreadState;
-  /** Most recent actual final settlement; optional for legacy publishers/registries. */
-  lastFinishedAt?: number;
 }
 
 export interface HerdrSnapshot {
@@ -54,13 +52,6 @@ export function herdrSnapshot(
     if (snapshot.nodes.length >= MAX_NODES) break;
     const node: HerdrThread = { path: thread.path, type: thread.type, state: thread.state };
     if (thread.parent) node.parent = thread.parent;
-    if (
-      thread.lastFinishedAt !== undefined &&
-      Number.isSafeInteger(thread.lastFinishedAt) &&
-      thread.lastFinishedAt > 0 &&
-      thread.lastFinishedAt <= 8_640_000_000_000_000
-    )
-      node.lastFinishedAt = thread.lastFinishedAt;
     snapshot.nodes.push(node);
     snapshot.omitted--;
     // Reserve space for the real timestamp substituted at publication time.

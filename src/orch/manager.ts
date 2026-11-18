@@ -217,7 +217,6 @@ export class ThreadManager {
         error: current.error,
         createdAt: current.createdAt,
         ...(current.lastStartedAt !== undefined ? { lastStartedAt: current.lastStartedAt } : {}),
-        ...(current.lastFinishedAt !== undefined ? { lastFinishedAt: current.lastFinishedAt } : {}),
         sessionFile: current.sessionFile,
         // Settled totals only. startedAt and partial usage must not churn persistence.
         elapsedMs: record.view.elapsedMs ?? 0,
@@ -265,14 +264,6 @@ export class ThreadManager {
         outputTokens: storedView.outputTokens ?? 0,
       };
       delete view.startedAt;
-      // Legacy/malformed optional metadata must not prevent restoring the actual session.
-      if (
-        view.lastFinishedAt !== undefined &&
-        (!Number.isSafeInteger(view.lastFinishedAt) ||
-          view.lastFinishedAt <= 0 ||
-          view.lastFinishedAt > 8_640_000_000_000_000)
-      )
-        delete view.lastFinishedAt;
       if (view.parent !== parentPath(path)) throw new Error(`Invalid saved parent for ${path}`);
       if (active(view)) {
         view.state = "paused";
@@ -505,9 +496,6 @@ export class ThreadManager {
       targets.map(async (item) => {
         if (item.driver) await item.driver.abort();
         await item.run;
-        // Active runs timestamp their own final settlement below. Explicitly stopping a
-        // paused session is a new final transition; stopping an already-final session is not.
-        if (item.view.state === "paused") item.view.lastFinishedAt = Date.now();
         item.view.state = "stopped";
         item.view.status = "Stopped; session retained";
         delete item.view.output;
@@ -696,8 +684,6 @@ export class ThreadManager {
       } finally {
         this.clearTimeout(record);
         this.freezeElapsed(record);
-        if (["completed", "failed", "stopped"].includes(record.view.state))
-          record.view.lastFinishedAt = Date.now();
         // A settled agent shows its real status; summaries describe active work only.
         delete record.view.summary;
         record.liveInputTokens = 0;

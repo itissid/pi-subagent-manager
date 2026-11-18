@@ -43,67 +43,6 @@ test("snapshot exports only hierarchy/state, counts active children, and exclude
   assert.ok(!JSON.stringify(snapshot).includes("PRIVATE"));
 });
 
-test("snapshot whitelists valid lastFinishedAt without inferring missing or malformed finishes", () => {
-  const completed = {
-    ...thread("/root/completed", "completed"),
-    lastFinishedAt: 1_000,
-    updatedAt: 9_000,
-    task: "PRIVATE PROMPT",
-    output: "PRIVATE OUTPUT",
-  };
-  const running = { ...thread("/root/running"), lastFinishedAt: 2_000 };
-  const legacy = { ...thread("/root/legacy", "completed"), updatedAt: 8_000 };
-  const snapshot = herdrSnapshot("session", [completed, running, legacy], 10_000);
-  assert.deepEqual(snapshot.nodes.find((node) => node.path === completed.path), {
-    ...thread("/root/completed", "completed"),
-    lastFinishedAt: 1_000,
-  });
-  assert.equal(snapshot.nodes.find((node) => node.path === running.path)?.lastFinishedAt, 2_000);
-  assert.equal(snapshot.nodes.find((node) => node.path === legacy.path)?.lastFinishedAt, undefined);
-  assert.ok(!JSON.stringify(snapshot).includes("PRIVATE"));
-  assert.ok(snapshot.nodes.every((node) => !("updatedAt" in node)));
-
-  for (const invalid of [null, -1, 0, 1.5, NaN, Infinity, "2000", 8_640_000_000_000_001]) {
-    const value = herdrSnapshot(
-      "session",
-      [{ ...thread("/root/worker", "completed"), lastFinishedAt: invalid as number }],
-      10_000,
-    );
-    assert.equal(Object.hasOwn(value.nodes[0], "lastFinishedAt"), false);
-  }
-});
-
-test("heartbeat updates publication time, never an existing lastFinishedAt", async (t) => {
-  t.mock.timers.enable({ apis: ["setInterval"] });
-  let now = 10_000;
-  const writes: string[] = [];
-  const child = { ...thread("/root/worker"), lastFinishedAt: 1_000 };
-  const bridge = new HerdrBridge({
-    terminalId: "t1x",
-    now: () => now,
-    write: async (_, value) => {
-      writes.push(value);
-    },
-  });
-  try {
-    bridge.update("session", [child]);
-    await bridge.flush();
-    now = 40_000;
-    t.mock.timers.tick(30_000);
-    await bridge.flush();
-    assert.equal(writes.length, 2);
-    assert.equal(JSON.parse(writes[1]).updatedAt, 40_000);
-    assert.equal(JSON.parse(writes[1]).nodes[0].lastFinishedAt, 1_000);
-    child.lastFinishedAt = 35_000;
-    bridge.update("session", [child]);
-    await bridge.flush();
-    assert.equal(writes.length, 3, "a new real finish is a semantic metadata change");
-    assert.equal(JSON.parse(writes[2]).nodes[0].lastFinishedAt, 35_000);
-  } finally {
-    await bridge.close();
-  }
-});
-
 test("snapshot bounds UTF-8 bytes, prioritizes active children, and counts omitted activity", () => {
   const children = Array.from({ length: 200 }, (_, i) =>
     thread(`/root/${i}-${"界".repeat(100)}`, "completed"),
